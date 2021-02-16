@@ -1,3 +1,5 @@
+import asyncio
+
 import discord
 from discord.ext import commands
 
@@ -9,13 +11,14 @@ intents = discord.Intents().all()
 # Create team_bot instance
 team_bot = commands.Bot(command_prefix='!', intents=intents)
 
-teams_category = "State Teams"
+teams_category_name = "State Teams"
 
 team_names = ['international', 'alaska', 'texas', 'california', 'montana', 'new mexico', 'arizona', 'nevada',
               'colorado', 'oregon', 'wyoming', 'michigan', 'minnesota', 'utah', 'idaho', 'kansas', 'nebraska']
 
 role_map = {}
 channel_map = {}
+category_map = {}
 
 
 def sync_maps(guild: discord.Guild):
@@ -24,6 +27,8 @@ def sync_maps(guild: discord.Guild):
         role_map[role.name] = role.id
     for channel in guild.text_channels:
         channel_map[channel.name] = channel.id
+    for category in guild.categories:
+        category_map[category.name] = category.id
 
 
 def get_channel_name(name):
@@ -41,15 +46,16 @@ def get_role_name(name):
 async def create_role(guild: discord.Guild, team_name: str):
     role_name = get_role_name(team_name)
     if role_name not in role_map:
-        role = await guild.create_role(name=get_role_name(team_name), mentionable=True)
+        role = await guild.create_role(name=role_name, mentionable=True)
         role_map[role.name] = role.id
-        print('created role: ', role)
+        print(f'created role: {role.name} <{role.id}>')
 
 
 async def create_channel(guild: discord.Guild, team_name: str):
     channel_name = get_channel_name(team_name)
+    teams_category = category_map[teams_category_name]
     if channel_name not in channel_map:
-        channel = await guild.create_text_channel(name=get_channel_name(team_name), category=teams_category)
+        channel = await guild.create_text_channel(name=channel_name, category=guild.get_channel(teams_category))
         channel_map[channel.name] = channel.id
         print('created channel: ', channel)
 
@@ -90,7 +96,7 @@ async def cleanup(ctx: commands.Context):
 
     # remove category
     for category in guild.categories:
-        if category.name == teams_category:
+        if category.name == teams_category_name:
             await category.delete()
 
     await ctx.send("All clean!")
@@ -109,17 +115,19 @@ async def init(ctx: commands.Context):
 
     has_teams_category = False
     for category in guild.categories:
-        if category.name == teams_category:
+        if category.name == teams_category_name:
             has_teams_category = True
             break
 
     if not has_teams_category:
-        await guild.create_category(teams_category)
+        await guild.create_category(teams_category_name)
 
     sync_maps(guild)
 
+    tasks = []
     for team_name in team_names:
-        await create_team(guild, team_name)
+        tasks.append(asyncio.create_task(create_team(guild, team_name)))
+    await asyncio.wait(tasks)
 
     await ctx.send("Created teams!")
 
