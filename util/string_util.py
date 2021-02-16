@@ -2,6 +2,13 @@ import random
 import re
 
 
+def capitalize(team_name: str):
+    new_name = ""
+    for word in team_name.split():
+        new_name += word[0:1].upper() + word[1:] + " "
+    return new_name[:-1]
+
+
 def markdown_escape(text: str):
     return re.sub(r"([_*~`|])", r"\\\g<1>", text)
 

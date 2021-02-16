@@ -2,6 +2,7 @@ import discord
 from discord.ext import commands
 
 import util.io_util as io_util
+import util.string_util as string_util
 
 # adding intents
 intents = discord.Intents().all()
@@ -9,59 +10,105 @@ intents = discord.Intents().all()
 # Create team_bot instance
 team_bot = commands.Bot(command_prefix='!', intents=intents)
 
-teams_category_name = "State Teams"
-
 team_names = ['international', 'alaska', 'texas', 'california', 'montana', 'new mexico', 'arizona', 'nevada',
               'colorado', 'oregon', 'wyoming', 'michigan', 'minnesota', 'utah', 'idaho', 'kansas', 'nebraska']
 
-role_map = {}
-channel_map = {}
-category_map = {}
+
+def get_role_name(team_name: str):
+    return string_util.capitalize(team_name)
 
 
-def sync_maps(guild: discord.Guild):
-    role_map.clear()
+def get_category_name(team_name: str):
+    return "Team " + string_util.capitalize(team_name)
+
+
+def get_text_channel_name(team_name: str):
+    return team_name.replace(" ", "-").lower()
+
+
+def get_voice_channel_name(team_name: str):
+    return string_util.capitalize(team_name)
+
+
+def get_role(guild: discord.Guild, team_name: str):
+    role_name = get_role_name(team_name)
     for role in guild.roles:
-        role_map[role.name] = role.id
-    for channel in guild.text_channels:
-        channel_map[channel.name] = channel.id
+        if role.name == role_name:
+            return role
+    return None
+
+
+def get_category(guild: discord.Guild, team_name: str):
+    category_name = get_category_name(team_name)
     for category in guild.categories:
-        category_map[category.name] = category.id
+        if category.name == category_name:
+            return category
+    return None
 
 
-def get_channel_name(name):
-    return name.replace(" ", "-")
+def get_text_channel(guild: discord.Guild, team_name: str):
+    text_channel_name = get_text_channel_name(team_name)
+    for text_channel in guild.text_channels:
+        if text_channel.name == text_channel_name:
+            return text_channel
+    return None
 
 
-# capitalize a team name
-def get_role_name(name):
-    new_name = ""
-    for word in name.split():
-        new_name += word[0:1].upper() + word[1:] + " "
-    return new_name[:-1]
+def get_voice_channel(guild: discord.Guild, team_name: str):
+    voice_channel_name = get_voice_channel_name(team_name)
+    for voice_channel in guild.voice_channels:
+        if voice_channel.name == voice_channel_name:
+            return voice_channel
+    return None
+
+
+def get_current_team_role(member: discord.Member):
+    for role in member.roles:
+        if role.name.lower() in team_names:
+            return role
+    return None
 
 
 async def create_role(guild: discord.Guild, team_name: str):
-    role_name = get_role_name(team_name)
-    if role_name not in role_map:
+    if get_role(guild, team_name) is None:
+        role_name = get_role_name(team_name)
         role = await guild.create_role(name=role_name, mentionable=True)
-        role_map[role.name] = role.id
         print(f'created role: {role.name} <{role.id}>')
 
 
-async def create_channel(guild: discord.Guild, team_name: str):
-    channel_name = get_channel_name(team_name)
-    teams_category = category_map[teams_category_name]
-    if channel_name not in channel_map:
-        channel = await guild.create_text_channel(name=channel_name, category=guild.get_channel(teams_category))
-        channel_map[channel.name] = channel.id
-        print('created channel: ', channel)
+async def create_category(guild: discord.Guild, team_name: str):
+    if get_category(guild, team_name) is None:
+        category_name = get_category_name(team_name)
+        overwrites = {
+            guild.default_role: discord.PermissionOverwrite(read_messages=False),
+            get_role(guild, team_name): discord.PermissionOverwrite(read_messages=True)
+        }
+        category = await guild.create_category(name=category_name, overwrites=overwrites)
+        print('created category: ', category)
+
+
+async def create_voice_channel(guild: discord.Guild, team_name: str):
+    if get_voice_channel(guild, team_name) is None:
+        category = get_category(guild, team_name)
+        channel_name = get_voice_channel_name(team_name)
+        channel = await guild.create_voice_channel(name=channel_name, category=category)
+        print('created text channel: ', channel)
+
+
+async def create_text_channel(guild: discord.Guild, team_name: str):
+    if get_text_channel(guild, team_name) is None:
+        category = get_category(guild, team_name)
+        channel_name = get_text_channel_name(team_name)
+        channel = await guild.create_text_channel(name=channel_name, category=category)
+        print('created text channel: ', channel)
 
 
 # create a role and channel for a team
 async def create_team(guild: discord.Guild, team_name: str):
     await create_role(guild, team_name)
-    await create_channel(guild, team_name)
+    await create_category(guild, team_name)
+    await create_text_channel(guild, team_name)
+    await create_voice_channel(guild, team_name)
 
 
 # on_ready event
@@ -75,27 +122,29 @@ async def on_ready():
 async def cleanup(ctx: commands.Context):
     guild: discord.Guild = ctx.guild
 
-    sync_maps(guild)
-
     # remove roles and channels
     for team_name in team_names:
-        role_name = get_role_name(team_name)
-        channel_name = get_channel_name(team_name)
 
-        # remove role
-        if role_name in role_map:
-            await guild.get_role(role_map[role_name]).delete()
-            print('deleted role:', role_name)
+        role = get_role(guild, team_name)
+        category = get_category(guild, team_name)
+        text_channel = get_text_channel(guild, team_name)
+        voice_channel = get_voice_channel(guild, team_name)
 
-        # remove channel
-        if channel_name in channel_map:
-            await guild.get_channel(channel_map[channel_name]).delete()
-            print('deleted channel:', channel_name)
+        if role in guild.roles:
+            print(f'Deleting role: "{role.name}" <{role.id}>')
+            await role.delete()
 
-    # remove category
-    for category in guild.categories:
-        if category.name == teams_category_name:
+        if category in guild.categories:
+            print(f'Deleting category: "{category.name}" <{category.id}>')
             await category.delete()
+
+        if text_channel in guild.text_channels:
+            print(f'Deleting text channel: "{text_channel.name}" <{text_channel.id}>')
+            await text_channel.delete()
+
+        if voice_channel in guild.voice_channels:
+            print(f'Deleting voice channel: "{voice_channel.name}" <{voice_channel.id}>')
+            await voice_channel.delete()
 
     await ctx.send("All clean!")
 
@@ -111,17 +160,6 @@ async def list_teams(ctx: commands.Context):
 async def init(ctx: commands.Context):
     guild: discord.Guild = ctx.guild
 
-    has_teams_category = False
-    for category in guild.categories:
-        if category.name == teams_category_name:
-            has_teams_category = True
-            break
-
-    if not has_teams_category:
-        await guild.create_category(teams_category_name)
-
-    sync_maps(guild)
-
     for team_name in team_names:
         await create_team(guild, team_name)
 
@@ -134,14 +172,18 @@ async def team(ctx: commands.Context, *args):
     member: discord.Member = ctx.author
     guild: discord.Guild = ctx.guild
 
-    sync_maps(guild)
+    team_name = get_role_name(" ".join(args))
 
-    role_name = get_role_name("".join(args).lower())
-    if role_name in role_map:
-        role = guild.get_role(role_map[role_name])
-        if role not in member.roles:
-            await member.add_roles(role)
-            await ctx.send("You have been added to team " + role.name + "!")
+    current_team_role = get_current_team_role(member)
+    new_role = get_role(guild, team_name)
+    if new_role is not None:
+        if new_role not in member.roles:
+            if current_team_role is not None:
+                await member.remove_roles(current_team_role)
+                await ctx.send("You have been switched from " + current_team_role.name + " to " + new_role.name)
+            else:
+                await ctx.send("You have been added to team " + new_role.name)
+            await member.add_roles(new_role)
         else:
             await ctx.send("You are already part of that team!")
     else:
