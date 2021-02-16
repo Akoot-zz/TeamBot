@@ -1,5 +1,3 @@
-import asyncio
-
 import discord
 from discord.ext import commands
 
@@ -124,10 +122,8 @@ async def init(ctx: commands.Context):
 
     sync_maps(guild)
 
-    tasks = []
     for team_name in team_names:
-        tasks.append(asyncio.create_task(create_team(guild, team_name)))
-    await asyncio.wait(tasks)
+        await create_team(guild, team_name)
 
     await ctx.send("Created teams!")
 
