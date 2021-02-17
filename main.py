@@ -15,14 +15,15 @@ team_names = ['international', 'alaska', 'texas', 'california', 'montana', 'new 
 
 spam_channel_name = "bot-spam"
 
+colors = io_util.load_json("colors.json")
+
 help_embed = discord.Embed(
-    color=(discord.Color.from_rgb(137, 190, 244)),
+    color=discord.Color.from_rgb(137, 190, 244),
     title="Bot help",
-    description=
-    "Show a list of teams by typing `!listteams`\n\n"
-    "To join a team, simply type `!team <team name>`\n"
-    "*Example: `!team new mexico`*\n\n"
-    "If for whatever reason you chose the wrong team, you can change it using the same command...\n\n"
+    description="Show a list of teams by typing `!listteams`\n\n"
+                "To join a team, simply type `!team <team name>`\n"
+                "*Example: `!team new mexico`*\n\n"
+                "If for whatever reason you chose the wrong team, you can change it using the same command...\n\n"
 )
 
 
@@ -177,7 +178,8 @@ async def cleanup(ctx: commands.Context):
             print(f'Deleting voice channel: "{voice_channel.name}" <{voice_channel.id}>')
             await voice_channel.delete()
 
-    await ctx.send("All clean!")
+    if ctx.channel is not spam_channel:
+        await ctx.send("All clean!")
 
 
 @team_bot.command(aliases=['lt', 'listteams'])
@@ -188,6 +190,39 @@ async def list_teams(ctx: commands.Context):
 @team_bot.command(name='h')
 async def help_command(ctx: commands.Context):
     await ctx.channel.send(embed=help_embed)
+
+
+def get_color(hex_string: str):
+    return int(hex_string.lstrip('#'), 16)
+
+
+@team_bot.command(aliases=['colors', 'listcolors'])
+async def list_colors(ctx: commands.Context):
+    await ctx.reply("(colors go here)")
+
+
+@team_bot.command(aliases=['tc', 'teamcolor'])
+async def team_color(ctx: commands.Context, *args):
+    team_role = get_current_team_role(ctx.author)
+    if team_role is not None:
+        color_string = "_".join(args).lower()
+        if color_string.startswith("#"):
+            color_value = get_color(color_string)
+        else:
+            if color_string in colors:
+                color_value = get_color(colors[color_string])
+            else:
+                await ctx.reply("That is not a valid color! *Type `!colors` for a list of colors...*")
+                return
+        await team_role.edit(color=discord.Color(value=color_value))
+
+        embed = discord.Embed(
+            color=color_value,
+            description=f"Set role color of {team_role.name} to {color_string}"
+        )
+        await ctx.channel.send(embed=embed)
+    else:
+        await ctx.reply("You aren't part a team")
 
 
 # !init command
@@ -201,7 +236,9 @@ async def init(ctx: commands.Context):
         await guild.create_text_channel(name=spam_channel_name, category=get_text_category(guild))
 
     for team_name in team_names:
+        print(f'[{team_name}]')
         await create_team(guild, team_name)
+        print()
 
     await ctx.reply(f"Created teams! Please use <#{get_spam_channel(guild).id}> for further commands...")
 
@@ -223,9 +260,9 @@ async def team(ctx: commands.Context, *args):
             text_channel = get_text_channel(guild, team_name)
             if current_team_role is not None:
                 await member.remove_roles(current_team_role)
-                await ctx.reply("Switched from " + current_team_role.name + " to <#" + str(text_channel.id) + ">!")
+                await ctx.reply(f"Switched from {current_team_role.name} to <#{text_channel.id}>!")
             else:
-                await ctx.reply("Added to team <#" + str(text_channel.id) + ">!")
+                await ctx.reply(f"Added to team <#{text_channel.id}>!")
             await member.add_roles(new_role)
         else:
             await ctx.reply("Already part of that team!")
