@@ -1,3 +1,5 @@
+import os
+
 import discord
 from discord.ext import commands
 
@@ -270,8 +272,13 @@ async def team(ctx: commands.Context, *args):
         await ctx.reply("That team doesn't exist!")
 
 
-# Load auth token from 'auth.json'
-auth = io_util.load_json('auth.json')
+token_environment_key = "DISCORD_TOKEN"
+if token_environment_key in os.environ:
+    # Load token from the environment variable
+    token = os.environ[token_environment_key]
+else:
+    # Load auth token from 'auth.json'
+    token = io_util.load_json('auth.json')['token']
 
-# Run Ori using the auth token object
-team_bot.run(auth['token'])
+# Run TeamBot using the auth token
+team_bot.run(token)
