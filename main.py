@@ -13,6 +13,32 @@ team_bot = commands.Bot(command_prefix='!', intents=intents)
 team_names = ['international', 'alaska', 'texas', 'california', 'montana', 'new mexico', 'arizona', 'nevada',
               'colorado', 'oregon', 'wyoming', 'michigan', 'minnesota', 'utah', 'idaho', 'kansas', 'nebraska']
 
+spam_channel_name = "bot-spam"
+
+help_embed = discord.Embed(
+    color=(discord.Color.from_rgb(137, 190, 244)),
+    title="Bot help",
+    description=
+    "Show a list of teams by typing `!listteams`\n\n"
+    "To join a team, simply type `!team <team name>`\n"
+    "*Example: `!team new mexico`*\n\n"
+    "If for whatever reason you chose the wrong team, you can change it using the same command...\n\n"
+)
+
+
+def get_text_category(guild: discord.Guild):
+    for category in guild.categories:
+        if category.name.lower() == "text channels":
+            return category
+    return None
+
+
+def get_spam_channel(guild: discord.Guild):
+    for channel in guild.channels:
+        if channel.name == spam_channel_name:
+            return channel
+    return None
+
 
 def get_role_name(team_name: str):
     return string_util.capitalize(team_name)
@@ -84,7 +110,7 @@ async def create_category(guild: discord.Guild, team_name: str):
             get_role(guild, team_name): discord.PermissionOverwrite(read_messages=True)
         }
         category = await guild.create_category(name=category_name, overwrites=overwrites)
-        print('created category: ', category)
+        print(f'created category: {category.name} <{category.id}>')
 
 
 async def create_voice_channel(guild: discord.Guild, team_name: str):
@@ -92,7 +118,7 @@ async def create_voice_channel(guild: discord.Guild, team_name: str):
         category = get_category(guild, team_name)
         channel_name = get_voice_channel_name(team_name)
         channel = await guild.create_voice_channel(name=channel_name, category=category)
-        print('created text channel: ', channel)
+        print(f'created voice channel: {channel.name} <{channel.id}>')
 
 
 async def create_text_channel(guild: discord.Guild, team_name: str):
@@ -100,7 +126,7 @@ async def create_text_channel(guild: discord.Guild, team_name: str):
         category = get_category(guild, team_name)
         channel_name = get_text_channel_name(team_name)
         channel = await guild.create_text_channel(name=channel_name, category=category)
-        print('created text channel: ', channel)
+        print(f'created text channel: {channel.name} <{channel.id}>')
 
 
 # create a role and channel for a team
@@ -119,8 +145,13 @@ async def on_ready():
 
 # !cleanup command
 @team_bot.command()
+@commands.has_permissions(manage_guild=True)
 async def cleanup(ctx: commands.Context):
     guild: discord.Guild = ctx.guild
+
+    spam_channel = get_spam_channel(guild)
+    if spam_channel in guild.text_channels:
+        await spam_channel.delete()
 
     # remove roles and channels
     for team_name in team_names:
@@ -154,16 +185,27 @@ async def list_teams(ctx: commands.Context):
     await ctx.send('' + "\n".join(team_names))
 
 
+@team_bot.command(name='h')
+async def help_command(ctx: commands.Context):
+    await ctx.channel.send(embed=help_embed)
+
+
 # !init command
 @team_bot.command()
-@commands.has_permissions(manage_messages=True)
+@commands.has_permissions(manage_guild=True)
 async def init(ctx: commands.Context):
     guild: discord.Guild = ctx.guild
+
+    spam_channel = get_spam_channel(guild)
+    if spam_channel is None:
+        await guild.create_text_channel(name=spam_channel_name, category=get_text_category(guild))
 
     for team_name in team_names:
         await create_team(guild, team_name)
 
-    await ctx.send("Created teams!")
+    await ctx.reply(f"Created teams! Please use <#{get_spam_channel(guild).id}> for further commands...")
+
+    await spam_channel.send(embed=help_embed)
 
 
 # !team command
@@ -178,16 +220,17 @@ async def team(ctx: commands.Context, *args):
     new_role = get_role(guild, team_name)
     if new_role is not None:
         if new_role not in member.roles:
+            text_channel = get_text_channel(guild, team_name)
             if current_team_role is not None:
                 await member.remove_roles(current_team_role)
-                await ctx.send("You have been switched from " + current_team_role.name + " to " + new_role.name)
+                await ctx.reply("Switched from " + current_team_role.name + " to <#" + str(text_channel.id) + ">!")
             else:
-                await ctx.send("You have been added to team " + new_role.name)
+                await ctx.reply("Added to team <#" + str(text_channel.id) + ">!")
             await member.add_roles(new_role)
         else:
-            await ctx.send("You are already part of that team!")
+            await ctx.reply("Already part of that team!")
     else:
-        await ctx.send("That team doesn't exist!")
+        await ctx.reply("That team doesn't exist!")
 
 
 # Load auth token from 'auth.json'
