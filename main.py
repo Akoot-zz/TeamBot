@@ -28,6 +28,8 @@ help_embed = discord.Embed(
                 "If for whatever reason you chose the wrong team, you can change it using the same command...\n\n"
 )
 
+wotd = ""
+
 
 def get_text_category(guild: discord.Guild):
     for category in guild.categories:
@@ -200,7 +202,23 @@ def get_color(hex_string: str):
 
 @team_bot.command(aliases=['colors', 'listcolors'])
 async def list_colors(ctx: commands.Context):
-    await ctx.reply("(colors go here)")
+    color_names = []
+    for color in colors:
+        color_names.append(string_util.capitalize(color.replace("_", " ")))
+    await ctx.reply("`" + "` `".join(color_names) + "`")
+
+
+@team_bot.command(aliases=['wotd', 'word'])
+async def word_of_the_day(ctx: commands.Context, *args):
+    global wotd
+    if len(args):
+        wotd = string_util.capitalize(" ".join(args))
+        await ctx.send(f"The word of the day is now **{wotd}**!")
+    else:
+        if wotd:
+            await ctx.reply(f"The word of the day is: **{wotd}**\n")
+        else:
+            await ctx.reply("I'm not sure...")
 
 
 @team_bot.command(aliases=['tc', 'teamcolor'])
